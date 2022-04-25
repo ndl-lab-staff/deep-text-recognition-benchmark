@@ -4,6 +4,7 @@ import time
 import random
 import string
 import argparse
+from tqdm import tqdm
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -31,10 +32,10 @@ def train(opt):
     train_dataset = Batch_Balanced_Dataset(opt)
 
     log = open(f'./saved_models/{opt.exp_name}/log_dataset.txt', 'a')
-    AlignCollate_valid = AlignCollate(imgH=opt.imgH, imgW=opt.imgW, keep_ratio_with_pad=opt.PAD)
+    AlignCollate_valid = AlignCollate(imgH=opt.imgH, imgW=opt.val_imgW, keep_ratio_with_pad=opt.PAD)
     valid_dataset, valid_dataset_log = hierarchical_dataset(root=opt.valid_data, opt=opt)
     valid_loader = torch.utils.data.DataLoader(
-        valid_dataset, batch_size=opt.batch_size,
+        valid_dataset, batch_size=opt.val_batch_size,
         shuffle=True,  # 'True' to check training progress with validation function.
         num_workers=int(opt.workers),
         collate_fn=AlignCollate_valid, pin_memory=True)
@@ -42,7 +43,7 @@ def train(opt):
     print('-' * 80)
     log.write('-' * 80 + '\n')
     log.close()
-    
+
     """ model configuration """
     if 'CTC' in opt.Prediction:
         if opt.baiduCTC:
@@ -91,7 +92,7 @@ def train(opt):
     if 'CTC' in opt.Prediction:
         if opt.baiduCTC:
             # need to install warpctc. see our guideline.
-            from warpctc_pytorch import CTCLoss 
+            from warpctc_pytorch import CTCLoss
             criterion = CTCLoss()
         else:
             criterion = torch.nn.CTCLoss(zero_infinity=True).to(device)
@@ -141,6 +142,7 @@ def train(opt):
     best_accuracy = -1
     best_norm_ED = -1
     iteration = start_iter
+    bar = tqdm(total=opt.valInterval)
 
     while(True):
         # train part
@@ -172,7 +174,10 @@ def train(opt):
         loss_avg.add(cost)
 
         # validation part
-        if (iteration + 1) % opt.valInterval == 0 or iteration == 0: # To see training progress, we also conduct validation when 'iteration == 0' 
+        # if (iteration + 1) % opt.valInterval == 0 or iteration == 0: # To see training progress, we also conduct validation when 'iteration == 0'
+        bar.update(1)
+        if (iteration + 1) % opt.valInterval == 0: # To see training progress, we also conduct validation when 'iteration == 0'
+            bar.refresh()
             elapsed_time = time.time() - start_time
             # for log
             with open(f'./saved_models/{opt.exp_name}/log_train.txt', 'a') as log:
@@ -214,6 +219,7 @@ def train(opt):
                 predicted_result_log += f'{dashed_line}'
                 print(predicted_result_log)
                 log.write(predicted_result_log + '\n')
+            bar.reset()
 
         # save model per 1e+5 iter.
         if (iteration + 1) % 1e+5 == 0:
@@ -229,11 +235,13 @@ def train(opt):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--exp_name', help='Where to store logs and models')
+    parser.add_argument('--db_type', choices=['lmdb', 'xmlmdb', 'raw'], help='type of database')
     parser.add_argument('--train_data', required=True, help='path to training dataset')
     parser.add_argument('--valid_data', required=True, help='path to validation dataset')
     parser.add_argument('--manualSeed', type=int, default=1111, help='for random seed setting')
     parser.add_argument('--workers', type=int, help='number of data loading workers', default=4)
     parser.add_argument('--batch_size', type=int, default=192, help='input batch size')
+    parser.add_argument('--val_batch_size', type=int, default=192, help='input batch size')
     parser.add_argument('--num_iter', type=int, default=300000, help='number of iterations to train for')
     parser.add_argument('--valInterval', type=int, default=2000, help='Interval between each validation')
     parser.add_argument('--saved_model', default='', help="path to model to continue training")
@@ -255,6 +263,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_max_length', type=int, default=25, help='maximum-label-length')
     parser.add_argument('--imgH', type=int, default=32, help='the height of the input image')
     parser.add_argument('--imgW', type=int, default=100, help='the width of the input image')
+    parser.add_argument('--val_imgW', type=int, default=100, help='the width of the input image')
     parser.add_argument('--rgb', action='store_true', help='use rgb input')
     parser.add_argument('--character', type=str,
                         default='0123456789abcdefghijklmnopqrstuvwxyz', help='character label')
@@ -305,6 +314,7 @@ if __name__ == '__main__':
         # check multi-GPU issue https://github.com/clovaai/deep-text-recognition-benchmark/issues/1
         opt.workers = opt.workers * opt.num_gpu
         opt.batch_size = opt.batch_size * opt.num_gpu
+        opt.val_batch_size = opt.batch_size * opt.num_gpu
 
         """ previous version
         print('To equlize batch stats to 1-GPU setting, the batch_size is multiplied with num_gpu and multiplied batch_size is ', opt.batch_size)

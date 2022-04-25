@@ -32,7 +32,11 @@ class CTCLabelConverter(object):
         batch_text = torch.LongTensor(len(text), batch_max_length).fill_(0)
         for i, t in enumerate(text):
             text = list(t)
-            text = [self.dict[char] for char in text]
+            try:
+                text = [self.dict[char] for char in text]
+            except Exception as e:
+                print(text)
+                raise e
             batch_text[i][:len(text)] = torch.LongTensor(text)
         return (batch_text.to(device), torch.IntTensor(length).to(device))
 

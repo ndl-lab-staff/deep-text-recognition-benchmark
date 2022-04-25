@@ -24,7 +24,7 @@ def benchmark_all_eval(model, criterion, converter, opt, calculate_infer_time=Fa
                       'IC13_1015', 'IC15_1811', 'IC15_2077', 'SVTP', 'CUTE80']
 
     # # To easily compute the total accuracy of our paper.
-    # eval_data_list = ['IIIT5k_3000', 'SVT', 'IC03_867', 
+    # eval_data_list = ['IIIT5k_3000', 'SVT', 'IC03_867',
     #                   'IC13_1015', 'IC15_2077', 'SVTP', 'CUTE80']
 
     if calculate_infer_time:
@@ -86,7 +86,7 @@ def validation(model, criterion, evaluation_loader, converter, opt):
     infer_time = 0
     valid_loss_avg = Averager()
 
-    for i, (image_tensors, labels) in enumerate(evaluation_loader):
+    for i, (image_tensors, labels, _) in enumerate(evaluation_loader):
         batch_size = image_tensors.size(0)
         length_of_data = length_of_data + batch_size
         image = image_tensors.to(device)
@@ -116,7 +116,7 @@ def validation(model, criterion, evaluation_loader, converter, opt):
             else:
                 _, preds_index = preds.max(2)
             preds_str = converter.decode(preds_index.data, preds_size.data)
-        
+
         else:
             preds = model(image, text_for_pred, is_train=False)
             forward_time = time.time() - start_time
